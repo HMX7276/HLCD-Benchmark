@@ -1,0 +1,38 @@
+B3 fixed-cohort migration for v0.2.0 (2026-11-05)
+
+See MIGRATION_V0.2.md for exact schemas, metric denominators and new entry points.
+
+1. In the authorized environment archive the original cohort.csv, patient split
+   file, source exports, model settings, individual responses and result files.
+2. Choose a NEW HLCD_WORK and timeline version. Re-export for the SAME frozen
+   admission list. Do not run the generic extraction entry point expecting it
+   to preserve the old sample: it performs fresh cohort sampling.
+3. Keep exact admission/discharge/death timestamps and export lab/radiology
+   storetime plus microbiology storetime/storedate. Retain other required raw
+   tables and independently document derived daily vitals/GCS construction.
+4. Run python -m src.mimic.timeline to build schema 3. Preserve the original
+   split membership in the configured SPLITS_FILE. Review B3 eligibility and
+   result-time exclusions. Unknown availability is not backfilled as charttime.
+5. Run python -m src.runners.run_b3 --n 2000 --X 1 --out NEW_RESULT.json --ckpt NEW_CHECKPOINT.jsonl
+   with the intended model settings. Repeat required cutoffs/models with distinct
+   paths. --n is an upper limit after eligibility and split filtering; check n.
+6. Check exact label changes, input changes, actual case counts and failures.
+   Label-only corrections can use compatible saved responses for rescoring;
+   changed inputs/newly eligible cases require inference. Do not relabel old
+   scores as corrected without these analyses.
+7. Keep patient-level artifacts in the controlled environment and return only
+   permitted aggregate results. Record the actual provider revision and code
+   tag/hash. Provider changes behind an unchanged model ID cannot be detected.
+
+Day X ends at admission + (X+1)*24 hours. Exact availability must precede that
+cutoff. Microbiology date-only availability uses the following calendar midnight
+as a conservative upper bound (at or before cutoff). Missing, invalid and
+before-event availability is excluded. This does not recreate interim results.
+
+Official field definitions:
+https://mimic.mit.edu/docs/iv/modules/hosp/labevents.html
+https://mimic.mit.edu/docs/iv/modules/hosp/microbiologyevents.html
+https://physionet.org/content/mimic-iv-note/2.2/
+
+Other source availability and clinical label validity still need expert review.
+The source changes do not regenerate historical manuscript results.

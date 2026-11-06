@@ -1,0 +1,7 @@
+HLCD — Hospital Longitudinal Clinical Data Benchmark
+Copyright 2026 the HLCD Benchmark authors.
+
+This distribution contains research software under Apache-2.0.
+MIMIC-IV and MIMIC-IV-Note are independently licensed/controlled resources.
+No clinical database, patient-derived output or model weight is included.
+Third-party dependencies retain their respective licenses and are not vendored.
