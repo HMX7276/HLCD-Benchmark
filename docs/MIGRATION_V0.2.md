@@ -50,21 +50,19 @@ eligibility counts reported. Zero valid predictions produces null metrics.
 This differs from historical failure-as-zero scoring; comparing models requires
 reviewing coverage/failure rates together with conditional performance.
 
-`traps-target-aware-v2` reports four states: `explicit_recognition`,
-`incorrect_adoption`, `not_mentioned`, `unscorable`. The latter two never count
-as interception success. Matching uses response values and target entity,
-numeric value/time, not JSON key names or unrelated alarms. For value/flag
-targets with a known day, an unspecified or different response day is unresolved.
-Both clean and perturbed inputs use the same summarization prompt, including
-optional target-specific warnings. Per-type counts and valid-response rates are
-reported separately; paired-valid counts and clean targeted-warning rates are
-included. Clean warnings are not automatically false positives: genuine input
-uncertainty requires human review. These heuristic states still need expert
-validation before being interpreted as clinical error-detection ability.
+The 2026-11-07 working revision removes automatic perturbation scoring.
+`traps-responses-v1` stores answers to both clean and perturbed inputs using
+the same summarization prompt, including optional model-written warnings.
+Warnings are preserved as answer content and are not classified or scored.
+Per-type counts include `n`, `clean_valid`, `clean_failed`, `tampered_valid`,
+`tampered_failed`, and `paired_valid`. No recognition/adoption rates or semantic
+assessment fields are produced. `output_version` replaces the perturbation
+`score_version` field. Use a new checkpoint path: source/run fingerprints reject
+checkpoints created by the previous implementation.
 
 The output now has `metrics` and per-response `predictions` rows with explicit
 status, prediction/error and provenance. Perturbation rows preserve model
-summaries and paired assessments for later local rescoring. Treat all real
+summaries, pairing information and target metadata. Treat all real
 outputs/checkpoints as controlled research material.
 
 ## Runtime and compatibility

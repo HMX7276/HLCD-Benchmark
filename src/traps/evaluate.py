@@ -1,11 +1,12 @@
-"""Paired clean/perturbed single-model evaluation with descriptive target states."""
+"""Collect paired clean/perturbed responses and execution counts without scoring."""
 import argparse
 from collections import Counter, defaultdict
 import json
 from src.runners import prompts
 from src.runners.common import (infer, summary_prediction, model_options,run_fingerprint,execute,save_result)
-from src.traps.scoring import assess, SCORE_VERSION, STATES
 from src import config
+
+OUTPUT_VERSION = 'traps-responses-v1'
 
 
 def select_traps(traps,n):
@@ -25,7 +26,7 @@ def main():
     args=ap.parse_args()
     with open(args.traps or config.TRAPS_FILE,encoding='utf-8') as stream:
         traps=select_traps([json.loads(line) for line in stream if line.strip()],args.n)
-    options=model_options(args); fingerprint=run_fingerprint('traps',options,SCORE_VERSION)
+    options=model_options(args); fingerprint=run_fingerprint('traps',options,OUTPUT_VERSION)
     items=[]
     for trap in traps:
         if trap.get('trap_schema_version')!=2 or not trap.get('targets') or not trap.get('clean_input') or not trap.get('tampered_input'):
@@ -40,37 +41,20 @@ def main():
         return infer(messages,summary_prediction,*options)
     rows=execute(items,work,summary_prediction,'traps',fingerprint,args.ckpt)
     by_id={row['id']:row for row in rows}; counts=defaultdict(Counter)
-    paired=[]
     for trap in traps:
         clean=by_id[trap['trap_id']+':clean']; tampered=by_id[trap['trap_id']+':tampered']
         stats=counts[trap['type']]; stats['n']+=1
-        detail={'trap_id':trap['trap_id'],'type':trap['type']}
         for condition,row in [('clean',clean),('tampered',tampered)]:
-            if row['status']!='ok':
-                stats[condition+'_failed']+=1; detail[condition]={'state':'failed'}
-                continue
-            score=assess(trap,row['prediction'])
-            if condition=='clean':
-                warning=any(t['state']=='explicit_recognition' for t in score['targets'])
-                stats['clean_valid']+=1;stats['clean_targeted_warning']+=warning
-                detail['clean']={'targeted_warning':warning}
-            else:
-                stats['tampered_valid']+=1;stats[score['state']]+=1;detail['tampered']=score
+            stats[condition+('_valid' if row['status']=='ok' else '_failed')]+=1
+            row.update(trap_id=trap['trap_id'], type=trap['type'],
+                       condition=condition, targets=trap['targets'])
         if clean['status']==tampered['status']=='ok': stats['paired_valid']+=1
-        paired.append(detail)
-    per_type={}
-    for kind,stats in counts.items():
-        valid=stats['tampered_valid']; clean_valid=stats['clean_valid']
-        per_type[kind]={**dict(stats),**{s:stats[s] for s in STATES},
-            'explicit_recognition_rate':stats['explicit_recognition']/valid if valid else None,
-            'incorrect_adoption_rate':stats['incorrect_adoption']/valid if valid else None,
-            'clean_targeted_warning_rate':stats['clean_targeted_warning']/clean_valid if clean_valid else None}
-    metrics={'model':options[0],'score_version':SCORE_VERSION,'n':len(traps),'response_count':len(rows),
+    count_fields=('n','clean_valid','clean_failed','tampered_valid','tampered_failed','paired_valid')
+    per_type={kind:{field:stats[field] for field in count_fields} for kind,stats in counts.items()}
+    metrics={'model':options[0],'output_version':OUTPUT_VERSION,'n':len(traps),'response_count':len(rows),
              'fails':sum(r['status']!='ok' for r in rows),'per_type':per_type,
-             'run_fingerprint':fingerprint,'denominator':'per-condition valid responses; failures and unresolved states reported separately'}
-    # Per-case predictions remain private, enabling re-scoring without rerunning.
-    for row in rows:
-        row['assessment']=next(d for d in paired if row['id'].rsplit(':',1)[0]==d['trap_id'])
+             'run_fingerprint':fingerprint}
+    # Keep model responses and target metadata; no semantic classification or scores.
     save_result(args.out,metrics,rows)
 
 if __name__=='__main__': main()

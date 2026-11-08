@@ -4,9 +4,10 @@ type: software
 title: "HLCD: Hospital Longitudinal Clinical Data Benchmark"
 authors:
   - name: "HLCD Benchmark authors"
-version: 0.2.0
+version: 0.2.1
+date-released: 2026-11-08
 license: Apache-2.0
-abstract: "Research code for longitudinal clinical-record summarization, next-day event evaluation, and experimental perturbation scoring."
+abstract: "Research code for longitudinal clinical-record summarization, next-day event evaluation, and paired perturbation response collection."
 keywords:
   - clinical informatics
   - longitudinal records

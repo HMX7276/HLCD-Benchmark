@@ -20,7 +20,6 @@ from src.mimic.timeline import build_one
 from src.runners import common, run_b1, run_b3
 from src.tasks import b3
 from src.traps import build, evaluate
-from src.traps.scoring import assess
 from test_b3_temporal import synthetic_tables, ADMIT
 
 
@@ -239,59 +238,10 @@ class TransportBudget(unittest.TestCase):
             self.call('openai',{'choices':[{'message':{'content':''},'finish_reason':'length'}]})
 
 
-class TrapScoring(unittest.TestCase):
-    def trap(self,field='value',value='123.4',kind='value_magnitude'):
-        return {'trap_schema_version':2,'type':kind,'targets':[{'name':'Creatinine','field':field,'value':value}]}
-
-    def test_schema_keys_do_not_recognize_tampering(self):
-        answer=summary(key_abnormal_labs=[{'name':'Creatinine','value':'123.4'}])
-        self.assertEqual(assess(self.trap(),answer)['state'],'incorrect_adoption')
-        answer['arbitrary_abnormal_key']='suspect inconsistent'
-        self.assertEqual(assess(self.trap(),answer)['state'],'incorrect_adoption')
-
-    def test_numeric_value_is_target_specific_and_exact(self):
-        for answer in (summary(key_abnormal_labs=[{'name':'Sodium','value':'123.4'}]),
-                       summary(key_abnormal_labs=[{'name':'Creatinine','value':'1234'}])):
-            self.assertNotEqual(assess(self.trap(),answer)['state'],'incorrect_adoption')
-
-    def test_same_analyte_wrong_or_missing_day_is_unresolved(self):
-        trap=self.trap();trap['targets'][0]['day']=2
-        for day in (None,3):
-            answer=summary(key_abnormal_labs=[{'name':'Creatinine','value':'123.4','day':day}])
-            self.assertEqual(assess(trap,answer)['state'],'unscorable')
-        answer=summary(key_abnormal_labs=[{'name':'Creatinine','value':'123.4','day':2}])
-        self.assertEqual(assess(trap,answer)['state'],'incorrect_adoption')
-
-    def test_absence_and_unresolved_not_detection(self):
-        self.assertEqual(assess(self.trap(),summary())['state'],'not_mentioned')
-        self.assertEqual(assess(self.trap(),summary(key_abnormal_labs=[{'name':'Creatinine'}]))['state'],'unscorable')
-
-    def test_target_warning_only(self):
-        for target,expected in [('Creatinine','explicit_recognition'),('Sodium','incorrect_adoption')]:
-            answer=summary(key_abnormal_labs=[{'name':'Creatinine','value':'123.4'}],
-                           warnings=[{'target':target,'reason':'inconsistent value'}])
-            self.assertEqual(assess(self.trap(),answer)['state'],expected)
-
-    def test_clinical_uncertainty_is_not_tampering_recognition(self):
-        answer=summary(key_abnormal_labs=[{'name':'Suspected Creatinine problem','value':'123.4'}])
-        self.assertEqual(assess(self.trap(),answer)['state'],'unscorable')
-
-    def test_numeric_and_text_days_equivalent(self):
-        for item in ({'name':'Creatinine','day':3},{'name':'Creatinine','day':'3'},
-                     {'name':'Creatinine Day 3'}):
-            self.assertEqual(assess(self.trap('day',3,'temporal_shift'),summary(key_abnormal_labs=[item]))['state'],'incorrect_adoption')
-
-    def test_flag_removal_does_not_mean_normal(self):
-        trap=self.trap('flag','unmarked','polarity_flip')
-        self.assertEqual(assess(trap,summary(key_abnormal_labs=[{'name':'Creatinine','value':'123.4'}]))['state'],'unscorable')
-        self.assertEqual(assess(trap,summary(key_abnormal_labs=[{'name':'Creatinine','value':'normal'}]))['state'],'incorrect_adoption')
-
-    def test_old_traps_rejected(self):
-        with self.assertRaises(ValueError): assess({'type':'causal_swap'},summary())
-
-    def test_omission_targeted_missing_warning(self):
-        answer=summary(warnings=[{'target':'laboratory results','reason':'not provided'}])
-        self.assertEqual(assess(self.trap('presence',None,'info_omission'),answer)['state'],'explicit_recognition')
+class TrapResponses(unittest.TestCase):
+    def trap(self):
+        return {'trap_schema_version':2,'type':'value_magnitude',
+                'targets':[{'name':'Creatinine','field':'value','value':'123.4'}]}
 
     def test_order_swap_changes_dated_events_and_records_targets(self):
         text='=== Day 1 ===\n[Medication] DrugA 1 g\n=== Day 3 ===\n[Medication] DrugB 2 g'
@@ -318,10 +268,56 @@ class TrapScoring(unittest.TestCase):
                 model.reset_mock();evaluate.main();model.assert_not_called()
                 result=json.loads(out.read_text())
                 stats=result['metrics']['per_type']['value_magnitude']
-                self.assertEqual(stats['not_mentioned'],1)
-                self.assertEqual(stats['explicit_recognition_rate'],0)
+                self.assertEqual(stats, {'n':1,'clean_valid':1,'clean_failed':0,
+                    'tampered_valid':1,'tampered_failed':0,'paired_valid':1})
+                self.assertEqual(set(result['metrics']), {'model','output_version','n',
+                    'response_count','fails','per_type','run_fingerprint'})
+                self.assertEqual(result['metrics']['output_version'],evaluate.OUTPUT_VERSION)
+                for row,condition in zip(result['predictions'],['clean','tampered']):
+                    self.assertEqual(row['prediction'],summary())
+                    self.assertEqual(row['condition'],condition)
+                    self.assertEqual(row['targets'],trap['targets'])
+                    self.assertNotIn('assessment',row)
                 trap['trap_id']='T2';source.write_text(json.dumps(trap)+'\n')
                 with self.assertRaisesRegex(ValueError,'Incompatible'): evaluate.main()
+
+    def test_failed_response_preserves_other_condition_and_counts(self):
+        trap=dict(self.trap(),trap_id='T1',clean_input='clean synthetic',tampered_input='tampered synthetic')
+        answer=summary(medications=[{'name':'SyntheticDrug'}])
+        def infer(messages,*args):
+            if 'tampered synthetic' in messages[1]['content']:
+                raise client.LLMError('synthetic failure')
+            return answer
+        with tempfile.TemporaryDirectory() as td,contextlib.redirect_stdout(io.StringIO()):
+            source=Path(td,'traps.jsonl');out=Path(td,'result.json')
+            source.write_text(json.dumps(trap)+'\n')
+            with patch.object(evaluate,'model_options',return_value=('synthetic',None,None,None)), \
+                 patch.object(evaluate,'run_fingerprint',return_value='test'), \
+                 patch.object(evaluate,'infer',side_effect=infer), \
+                 patch('sys.argv',['traps','--traps',str(source),'--out',str(out)]):
+                evaluate.main()
+            result=json.loads(out.read_text())
+            self.assertEqual(result['metrics']['response_count'],2)
+            self.assertEqual(result['metrics']['fails'],1)
+            self.assertEqual(result['metrics']['per_type']['value_magnitude'],
+                {'n':1,'clean_valid':1,'clean_failed':0,'tampered_valid':0,'tampered_failed':1,'paired_valid':0})
+            self.assertEqual(result['predictions'][0]['prediction'],answer)
+            self.assertIsNone(result['predictions'][1]['prediction'])
+            self.assertEqual(result['predictions'][1]['status'],'failed')
+
+    def test_empty_task_has_no_model_calls_or_scores(self):
+        with tempfile.TemporaryDirectory() as td,contextlib.redirect_stdout(io.StringIO()):
+            source=Path(td,'traps.jsonl');out=Path(td,'result.json');source.write_text('')
+            with patch.object(evaluate,'model_options',return_value=('synthetic',None,None,None)), \
+                 patch.object(evaluate,'run_fingerprint',return_value='test'), \
+                 patch.object(evaluate,'infer') as model, \
+                 patch('sys.argv',['traps','--traps',str(source),'--out',str(out)]):
+                evaluate.main();model.assert_not_called()
+            result=json.loads(out.read_text())
+            self.assertEqual(result['metrics']['n'],0)
+            self.assertEqual(result['metrics']['response_count'],0)
+            self.assertEqual(result['metrics']['per_type'],{})
+            self.assertEqual(result['predictions'],[])
 
 
 class CohortPool(unittest.TestCase):

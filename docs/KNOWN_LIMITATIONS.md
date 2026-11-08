@@ -18,10 +18,9 @@ not clinical validation or proof of historical benchmark accuracy.
   matching medication record in the admission, not every new drug/course; the
   current list includes some antifungals. major_procedure uses coded procedures,
   and new_key_exam is a count/imaging rule. Clinical validity requires review.
-- Perturbation targets and scores are explicit, but recognition/adoption remain
-  heuristic assessments. An omitted target is not credited as detection. Some
-  cases remain unscorable; paired clean warnings are not automatically false
-  alarms. Expert validation is required before claims of clinical detection.
+- Perturbation execution collects paired responses and completion counts only.
+  No automated semantic assessment or detection score is computed. Valid output
+  means a parseable response, not clinical correctness or successful detection.
 - The code does not include actual cohort records, complete historical run
   settings, expert-review evidence or the SQL creating derived vitals/GCS tables.
   Examples are not historical experiment settings.

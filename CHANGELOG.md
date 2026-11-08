@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.1 — perturbation response collection (2026-11-08)
+
+- Removed automatic perturbation classification, its scoring module and rates.
+- Retained paired clean/manipulated model answers, target metadata, execution
+  status, failure counts and paired-valid counts under `traps-responses-v1`.
+- Versioned the output separately from scores; previous checkpoints require
+  new paths because source/run fingerprints have changed.
+- Updated runner integration tests and current documentation. Published source
+  archives and historical experiment outputs remain historical artifacts.
+
 ## 0.2.0 — single-model correctness revision (prepared 2026-11-05)
 
 - Removed consensus/window voting implementation, configuration and CLI modes.

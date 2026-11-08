@@ -1,8 +1,8 @@
 # HLCD — Hospital Longitudinal Clinical Data
 
 Research code for evaluating language models on longitudinal hospital records:
-B1 summarization, B3 next-day event prediction, and experimental perturbation
-scoring. This source release is prepared as **v0.2.0** under Apache-2.0.
+B1 summarization, B3 next-day event prediction, and paired perturbation response
+collection. This source release is **v0.2.1** under Apache-2.0.
 
 **Status:** research software, not a clinical decision support system. This
 release includes B3 temporal-input corrections, but does not contain rerun
@@ -78,13 +78,14 @@ B3 labels (`b3-exact-events-v2`) use exact discharge/death timestamps; cases
 with unknown in-hospital death time are excluded and counted.
 
 Perturbations use paired clean/tampered inputs with schema 2 target metadata.
-`traps-target-aware-v2` reports explicit recognition, incorrect adoption,
-not mentioned and unscorable states separately. Clean targeted-warning rates
-are a control, not validated false-positive rates. `temporal_order_swap`
+The `traps-responses-v1` output preserves structured model answers, condition
+and target metadata, plus per-type valid/failed and paired-valid counts. It
+does not classify or score the answers and does not calculate detection rates.
+`temporal_order_swap`
 replaces the former text-order operation; no causal reasoning claim is made.
 Legacy scores and checkpoints are not compatible with these changed rules.
 
-Generate/evaluate perturbations in the authorized environment:
+Generate perturbations and collect responses in the authorized environment:
 
 ```text
 python -m src.traps.build
@@ -135,7 +136,7 @@ src/mimic/       extraction, timeline construction, note section parsing
 src/tasks/       B1/B3 tasks, splits, rendering and temporal policy
 src/runners/     single-model runners, validation and checkpoint handling
 src/eval/        scoring functions
-src/traps/       experimental perturbation generation and scoring
+src/traps/       experimental perturbation generation and response collection
 src/llm/         provider adapters, client, concurrency
 tests/          offline synthetic tests
 scripts/        release checks and controlled-environment analysis helpers

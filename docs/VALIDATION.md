@@ -1,5 +1,17 @@
 # Local release validation
 
+## v0.2.1 validation (2026-11-08)
+
+- After removing automatic perturbation scoring: 94 tests passed, zero failures,
+  errors or skips. Ten tests specific to the removed classifier were deleted;
+  two runner checks were added for failed-condition preservation and empty input.
+- Paired response persistence, execution counts and compatible checkpoint reuse
+  are covered by mocked integration tests. No real model endpoint was called.
+- Version 0.2.1 supersedes v0.2.0 for response collection; archived releases
+  retain their original code and score definitions.
+
+## Archived v0.2.0 validation
+
 Checked on 2026-11-05 in a fresh Windows virtual environment installed from
 this release's `requirements.txt`.
 
